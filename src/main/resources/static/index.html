@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chamados do laboratório</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f3f6fa; color: #18283b; font: 1rem/1.5 system-ui, sans-serif; }
+        main { max-width: 54rem; margin: auto; padding: 1.5rem; }
+        h1, h2, h3, p { margin: 0 0 .75rem; }
+        section { margin-top: 1rem; padding: 1.25rem; background: white; border: 1px solid #cbd5e1; border-radius: .75rem; }
+        label { display: block; font-weight: 600; }
+        input, textarea, select, button { font: inherit; padding: .5rem .75rem; border-radius: .35rem; }
+        input, textarea, select { border: 1px solid #64748b; background: white; color: inherit; }
+        input, textarea { display: block; width: 100%; margin: .25rem 0 1rem; }
+        textarea { resize: vertical; }
+        button { background: #174b83; border: 1px solid transparent; color: white; cursor: pointer; }
+        button:disabled { opacity: .65; cursor: wait; }
+        :focus-visible { outline: 3px solid #ad5800; outline-offset: 2px; }
+        ul { list-style: none; margin: 0; padding: 0; }
+        li { border-top: 1px solid #cbd5e1; padding: 1rem 0; overflow-wrap: anywhere; }
+        .descricao { white-space: pre-wrap; }
+        #mensagem { margin: .75rem 0 0; }
+        .erro { color: #9d2020; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Chamados do laboratório</h1>
+    <p>Registre problemas com equipamentos e acompanhe a resolução.</p>
+
+    <section aria-labelledby="titulo-formulario">
+        <h2 id="titulo-formulario">Novo chamado</h2>
+        <form id="formulario">
+            <label for="equipamento">Equipamento</label>
+            <input id="equipamento" name="equipamento" maxlength="120" required>
+
+            <label for="descricao">Descrição</label>
+            <textarea id="descricao" name="descricao" rows="3" maxlength="1000" required></textarea>
+
+            <button type="submit">Abrir chamado</button>
+        </form>
+        <p id="mensagem" role="status"></p>
+    </section>
+
+    <section aria-labelledby="titulo-lista">
+        <h2 id="titulo-lista">Chamados registrados</h2>
+        <label for="filtro">Filtrar por status</label>
+        <select id="filtro">
+            <option value="">Todos</option>
+            <option value="ABERTO">Abertos</option>
+            <option value="RESOLVIDO">Resolvidos</option>
+        </select>
+        <p id="estado-lista" role="status"></p>
+        <ul id="lista"></ul>
+    </section>
+</main>
+<script>
+    const formulario = document.querySelector('#formulario');
+    const filtro = document.querySelector('#filtro');
+    const lista = document.querySelector('#lista');
+    const mensagem = document.querySelector('#mensagem');
+    const estadoLista = document.querySelector('#estado-lista');
+    const api = './chamados';
+    let consultaAtual = 0;
+
+    function informar(elemento, texto, erro = false) {
+        elemento.textContent = texto;
+        elemento.classList.toggle('erro', erro);
+    }
+
+    async function requisitar(url, opcoes) {
+        const resposta = await fetch(url, opcoes);
+        if (!resposta.ok) {
+            throw new Error('O servidor retornou HTTP ' + resposta.status + '.');
+        }
+        return resposta;
+    }
+
+    function criarItem(chamado) {
+        const item = document.createElement('li');
+        const titulo = document.createElement('h3');
+        titulo.textContent = '#' + chamado.id + ' · ' + chamado.equipamento;
+        const descricao = document.createElement('p');
+        descricao.className = 'descricao';
+        descricao.textContent = chamado.descricao;
+        const status = document.createElement('p');
+        status.textContent = 'Status: ' + chamado.status;
+        item.append(titulo, descricao, status);
+
+        if (chamado.status === 'ABERTO') {
+            const botao = document.createElement('button');
+            botao.type = 'button';
+            botao.textContent = 'Resolver';
+            botao.setAttribute('aria-label', 'Resolver chamado ' + chamado.id);
+            botao.addEventListener('click', () => resolver(chamado.id, botao));
+            item.append(botao);
+        }
+        return item;
+    }
+
+    async function carregarChamados() {
+        const consulta = ++consultaAtual;
+        const sufixo = filtro.value ? '?status=' + encodeURIComponent(filtro.value) : '';
+        informar(estadoLista, 'Carregando chamados…');
+        try {
+            const resposta = await requisitar(api + sufixo);
+            const chamados = await resposta.json();
+            if (consulta !== consultaAtual) return;
+            lista.replaceChildren(...chamados.map(criarItem));
+            informar(estadoLista, chamados.length ? '' : 'Nenhum chamado neste filtro.');
+        } catch (erro) {
+            if (consulta !== consultaAtual) return;
+            lista.replaceChildren();
+            informar(estadoLista, 'Falha ao carregar os chamados. ' + erro.message, true);
+        }
+    }
+
+    formulario.addEventListener('submit', async (evento) => {
+        evento.preventDefault();
+        const dados = new FormData(formulario);
+        const equipamento = dados.get('equipamento').trim();
+        const descricao = dados.get('descricao').trim();
+        if (!equipamento || !descricao) {
+            informar(mensagem, 'Preencha o equipamento e a descrição.', true);
+            return;
+        }
+
+        const botao = formulario.querySelector('button');
+        botao.disabled = true;
+        informar(mensagem, 'Abrindo chamado…');
+        try {
+            const resposta = await requisitar(api, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({equipamento, descricao})
+            });
+            const chamado = await resposta.json();
+            formulario.reset();
+            filtro.value = 'ABERTO';
+            informar(mensagem, 'Chamado #' + chamado.id + ' aberto.');
+            await carregarChamados();
+        } catch (erro) {
+            informar(mensagem, 'Falha ao abrir o chamado. ' + erro.message, true);
+        } finally {
+            botao.disabled = false;
+        }
+    });
+
+    async function resolver(id, botao) {
+        botao.disabled = true;
+        try {
+            await requisitar(api + '/' + id + '/resolver', {method: 'PATCH'});
+            filtro.value = 'RESOLVIDO';
+            await carregarChamados();
+        } catch (erro) {
+            informar(estadoLista, 'Falha ao resolver o chamado. ' + erro.message, true);
+        } finally {
+            botao.disabled = false;
+        }
+    }
+
+    filtro.addEventListener('change', carregarChamados);
+    carregarChamados();
+</script>
+</body>
+</html>
