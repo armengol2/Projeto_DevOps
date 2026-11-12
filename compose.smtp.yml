@@ -1,0 +1,42 @@
+name: chamados-smtp
+
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      NOTIFY_EMAIL: ${NOTIFY_EMAIL:?Defina NOTIFY_EMAIL no arquivo .env.smtp}
+      SMTP_FROM: ${SMTP_FROM:?Defina SMTP_FROM no arquivo .env.smtp}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURITY: ${SMTP_SECURITY:-none}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RUN_MAILHOG_TESTS: "1"
+      MAILHOG_SMTP_HOST: mailhog
+      MAILHOG_SMTP_PORT: "1025"
+      MAILHOG_API_URL: http://mailhog:8025
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    depends_on:
+      mailhog:
+        condition: service_healthy
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8025/api/v2/messages"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  jenkins_home:
