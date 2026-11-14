@@ -36,3 +36,9 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Notificacoes SMTP / Python ###
+.env.smtp
+__pycache__/
+.coverage
+reports/

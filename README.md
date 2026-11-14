@@ -53,6 +53,113 @@ Quando o terminal mostrar `Started ChamadosApplication`, abra [Chamados do labor
 
 Execute `mvn test`. Os testes de integração usam JUnit, MockMvc e H2 em memória e podem rodar sem o PostgreSQL ativo. Os relatórios do Maven Surefire ficam em `target/surefire-reports/`.
 
+## Notificação do pipeline por e-mail/SMTP
+
+O Jenkins chama `scripts/notify_email.py` no bloco `post/always` global do `Jenkinsfile`, inclusive quando os testes ou o build falham. A mensagem informa resultado, job, número da build, branch, commit e links da execução e do console. O script usa somente a biblioteca padrão do Python 3.10 ou superior; Python e a ferramenta de cobertura são instalados pelo `jenkins/Dockerfile`.
+
+O destinatário vem exclusivamente de `NOTIFY_EMAIL`. O script retorna `0` quando o servidor aceita a mensagem, `1` em falha de transporte e `2` em configuração inválida. A entrega de uma notificação sobre um pipeline `FAILURE` retorna `0`: o resultado do pipeline e o resultado do envio são informações diferentes.
+
+Se o SMTP falhar, o Jenkins registra o erro e marca uma execução até então bem-sucedida como `UNSTABLE`. Uma execução que já estava `FAILURE` continua `FAILURE`. Senhas e respostas potencialmente sensíveis do servidor não são impressas pelo script.
+
+### Jenkins + MailHog com Docker Compose
+
+O arquivo `compose.smtp.yml` sobe o Jenkins e o MailHog na mesma rede, com um volume para os dados do Jenkins. Ele é um ambiente específico para validar a frente de SMTP. O Compose final do grupo deve incorporar esses serviços e incluir os demais containers exigidos pelo projeto.
+
+No PowerShell, na raiz do repositório:
+
+```powershell
+Copy-Item .env.smtp.example .env.smtp
+# Edite .env.smtp para definir NOTIFY_EMAIL e SMTP_FROM.
+docker compose --env-file .env.smtp -f compose.smtp.yml up -d --build
+docker compose --env-file .env.smtp -f compose.smtp.yml logs -f jenkins
+```
+
+O Jenkins fica em [localhost:18080](http://localhost:18080/) e a caixa de entrada do MailHog em [localhost:8025](http://localhost:8025/). No primeiro acesso, conclua o desbloqueio do Jenkins com a senha inicial:
+
+```powershell
+docker compose --env-file .env.smtp -f compose.smtp.yml exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+Crie um job **Pipeline from SCM**, aponte para este repositório e para a branch que contém esta implementação e use `Jenkinsfile` como script. As etapas são todas versionadas no arquivo. Esta contribuição parte da branch `feature/jenkins-pipeline`; enquanto estiver apenas local, o checkout remoto ainda não consegue lê-la. Após a integração na `main`, use a `main` no job.
+
+O estágio `Testes SMTP` executa os testes Python e exige cobertura de pelo menos 90%, incluindo ramificações, para o código em `scripts/`. No Compose de SMTP, o estágio também executa os testes reais contra o MailHog e confere as mensagens recebidas via API. Os relatórios `reports/smtp-tests.log` e `reports/smtp-coverage.xml` são arquivados no Jenkins mesmo quando os testes falham, junto aos relatórios Java e ao JAR das etapas seguintes quando disponíveis. Essa medição cobre o script SMTP; a cobertura da aplicação Java deve ser tratada pela frente de testes do grupo.
+
+Dentro da rede Docker, o Jenkins usa `mailhog:1025`. Para um script executado diretamente no Windows, use `127.0.0.1:1025`. O MailHog captura as mensagens localmente: ver uma mensagem nele comprova o envio SMTP para o servidor de teste, e não a entrega à caixa de entrada de um provedor externo.
+
+Para encerrar os serviços sem apagar o volume do Jenkins:
+
+```powershell
+docker compose --env-file .env.smtp -f compose.smtp.yml down
+```
+
+### Variáveis de ambiente do script
+
+| Variável | Uso |
+| --- | --- |
+| `NOTIFY_EMAIL` | Obrigatória. Um único destinatário, sem nome de exibição. |
+| `SMTP_FROM` | Obrigatória. Endereço do remetente, sem nome de exibição. |
+| `SMTP_HOST` | Obrigatória. Nome do servidor SMTP. |
+| `SMTP_PORT` | Porta do servidor; padrão `1025`. |
+| `SMTP_SECURITY` | `none` (padrão para MailHog), `starttls` ou `ssl`. |
+| `SMTP_TIMEOUT` | Tempo limite em segundos, positivo; padrão `10`. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Opcionais. Se usados, ambos devem ser definidos. |
+| `BUILD_STATUS` | Resultado informado pelo Jenkins; fora dele, padrão `UNKNOWN`. |
+| `JOB_NAME`, `BUILD_NUMBER`, `BUILD_URL` | Identificação da execução; fornecida automaticamente pelo Jenkins. |
+| `BRANCH_NAME` / `GIT_BRANCH`, `GIT_COMMIT` | Dados do código usado na execução, quando disponíveis. |
+
+Para um servidor SMTP externo, configure o host, a porta e a segurança exigidos por esse servidor e mantenha as credenciais fora do Git. O arquivo `.env.smtp` é ignorado pelo repositório; apenas o exemplo com endereços fictícios é versionado.
+
+### Testar sem Jenkins
+
+Os testes unitários não precisam de Docker nem de um servidor SMTP:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+Para ativar os testes reais de integração, inicie somente o MailHog e execute:
+
+```powershell
+docker compose --env-file .env.smtp.example -f compose.smtp.yml up -d mailhog
+$env:RUN_MAILHOG_TESTS = '1'
+$env:MAILHOG_SMTP_HOST = '127.0.0.1'
+$env:MAILHOG_API_URL = 'http://127.0.0.1:8025'
+python -m unittest discover -s tests -v
+Remove-Item Env:RUN_MAILHOG_TESTS
+```
+
+Os testes de integração enviam mensagens identificadas por um nome de job aleatório e verificam notificações `SUCCESS` e `FAILURE`. Não removem outras mensagens do MailHog. As variáveis `MAILHOG_SMTP_HOST`, `MAILHOG_SMTP_PORT` e `MAILHOG_API_URL` permitem mudar os endereços do servidor de teste.
+
+Exemplo de envio manual para o MailHog já ativo:
+
+```powershell
+$env:NOTIFY_EMAIL = 'destinatario@example.test'
+$env:SMTP_FROM = 'jenkins@example.test'
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:BUILD_STATUS = 'SUCCESS'
+$env:JOB_NAME = 'chamados-ci-local'
+$env:BUILD_NUMBER = '1'
+python scripts/notify_email.py
+```
+
+### Validação realizada em 11/11/2026
+
+- 27 testes SMTP aprovados, incluindo o envio e a leitura de mensagens reais no MailHog.
+- Cobertura do script: 98,2% das linhas e 94,6% das ramificações (97% no relatório combinado).
+- 4 testes Java aprovados e JAR gerado na execução bem-sucedida do Jenkins.
+- Execução real com Jenkins 2.580.2, Java 21, Python 3.13 e MailHog 1.0.1 em containers; testes também executados com Python 3.12 no Windows.
+
+| Cenário no Jenkins | Resultado verificado |
+| --- | --- |
+| Testes e build aprovados | `SUCCESS`; mensagem recebida, com branch e commit, JAR e relatórios arquivados. |
+| Teste Java falhando | `FAILURE`; mensagem de falha recebida e relatórios arquivados. |
+| Build aprovado e SMTP indisponível | `UNSTABLE`; falha de envio registrada no console. |
+| Teste Java falhando e SMTP indisponível | `FAILURE` preservado; falha de envio registrada no console. |
+| Teste SMTP falhando | `FAILURE`; mensagem de falha recebida e logs dos testes SMTP arquivados. |
+
+As falhas foram provocadas em cópias temporárias para validar o tratamento de erros; não fazem parte dos testes entregues. O ambiente temporário de validação foi separado da configuração normal do Compose.
+
 ## Uso de IA
 
 ### 1º Uso — Base da aplicação
@@ -76,3 +183,18 @@ Execute `mvn test`. Os testes de integração usam JUnit, MockMvc e H2 em memór
   > Vale a pena manter essa API com PostgreSQL, mas gostaria que fosse feito uma interface simples para facilitar a entrada de dados, pra simplificar o processo utilizando a base já criada.
 
 - **Conclusão** — A interface, apesar de simples, é completa e funcional o suficiente para inserir os dados na aplicação.
+
+### 2º Uso — Notificação SMTP e integração com Jenkins/MailHog
+
+#### Prompt 3
+
+- **Modelo/ferramenta** — ChatGPT (Codex; versão do modelo não registrada).
+- **Objetivo** — Implementar a frente de notificação por e-mail atribuída a Vinícius.
+- **Prompt utilizado**
+
+  > ok, implemente minha parte de notificação por e-mail/SMTP, com os testes e a integração com Jenkins e MailHog
+
+- **Resposta aceita** — Script Python com configuração por ambiente, testes unitários e de integração, chamada no encerramento do Jenkinsfile e ambiente Docker Compose de SMTP.
+- **Ajustes durante a validação** — Tratamento dos erros de formato de endereço, proteção contra injeção de cabeçalhos, uso do domínio do remetente no Message-ID para aceitar máquinas com hostname acentuado e captura explícita da branch e do commit retornados pelo checkout do Jenkins. O arquivo Compose foi mantido específico para a frente de SMTP para permitir integração com o trabalho dos demais membros.
+- **Dinâmica de uso** — Assistência nesta conversa para analisar o repositório, gerar código, revisar configurações, executar testes e documentar a contribuição. Não foi registrado pair programming entre integrantes nessa etapa.
+- **Autoria e entendimento** — O escopo e a divisão de responsabilidades foram fornecidos pelo integrante. O código desta contribuição foi produzido com assistência de IA; não há registro de trechos escritos manualmente pelo integrante nesta etapa. Cada integrante deve revisar e compreender os arquivos antes da defesa. A aplicação base e a contribuição inicial de Jenkins mantêm suas autorias registradas no histórico do Git.
