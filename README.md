@@ -89,7 +89,7 @@ Se o SMTP falhar, o Jenkins registra o erro e marca uma execução até então b
 
 ### Jenkins + MailHog com Docker Compose
 
-O arquivo `compose.smtp.yml` sobe o Jenkins e o MailHog na mesma rede, com um volume para os dados do Jenkins. Ele é um ambiente específico para validar a frente de SMTP. O Compose final do grupo deve incorporar esses serviços e incluir os demais containers exigidos pelo projeto.
+O arquivo `compose.smtp.yml` sobe o Jenkins e o MailHog na mesma rede, com um volume para os dados do Jenkins. Ele é um ambiente específico para validar a frente de SMTP. O `compose.yaml` da raiz incorpora esses serviços e inclui API e PostgreSQL; o `compose.smtp.yml` permanece como ambiente isolado só para validar a notificação por e-mail. Os dois usam as mesmas portas (18080, 8025 e 1025), então não suba os dois ao mesmo tempo.
 
 No PowerShell, na raiz do repositório:
 
@@ -186,6 +186,24 @@ python scripts/notify_email.py
 
 As falhas foram provocadas em cópias temporárias para validar o tratamento de erros; não fazem parte dos testes entregues. O ambiente temporário de validação foi separado da configuração normal do Compose.
 
+## Ambiente completo com Docker Compose
+
+O `compose.yaml` sobe a API, o PostgreSQL, o Jenkins e o MailHog. A API usa a imagem publicada no Docker Hub (`otaviosilva389/chamados-api:0.1.0`) e o Jenkins é construído pelo `jenkins/Dockerfile` local. Não é necessário criar `.env`: todos os valores têm padrão no próprio arquivo.
+
+```powershell
+docker compose up -d --build
+docker compose ps
+```
+
+| Serviço | Endereço | Observação |
+| --- | --- | --- |
+| API | [localhost:18081](http://localhost:18081/) | Conecta ao PostgreSQL pelas variáveis `DB_URL`, `DB_USER` e `DB_PASSWORD`. |
+| Jenkins | [localhost:18080](http://localhost:18080/) | SMTP configurado para `mailhog:1025`. |
+| MailHog | [localhost:8025](http://localhost:8025/) | Interface web; SMTP na porta 1025. |
+| PostgreSQL | rede interna | Não exposto ao host. |
+
+Os dados ficam nos volumes `postgres_data` e `jenkins_home`. Para encerrar sem apagá-los, use `docker compose down`; para apagá-los, `docker compose down -v`. Os valores podem ser sobrescritos por variáveis de ambiente ou por um `.env` opcional (`POSTGRES_PASSWORD`, `API_IMAGE`, `NOTIFY_EMAIL`, entre outras).
+
 ## Uso de IA
 
 ### 1º Uso — Base da aplicação
@@ -246,3 +264,19 @@ As falhas foram provocadas em cópias temporárias para validar o tratamento de 
 - A IA foi usada individualmente, em conversa passo a passo, também para orientar o fluxo de Git (branch, commits e PR).
 - Feito pelo integrante, sem IA: criar a conta e o repositório no Docker Hub, executar o build, o login e o push, e testar a imagem com PostgreSQL.
 - Gerado pela IA: o conteúdo do Dockerfile, do `.dockerignore` e o texto-base da seção do README.
+
+### 4º Uso — Docker Compose
+
+#### Prompt 5
+
+- **Modelo** — Claude (Anthropic), pelo claude.ai.
+- **Objetivo** — Criar o `compose.yaml` com API, PostgreSQL, Jenkins e MailHog, com as conexões e os volumes.
+- **Prompt utilizado**
+
+  > Preciso de ajuda para criar o `compose.yaml` com API, PostgreSQL, Jenkins e MailHog. Segue o zip do repositório.
+
+  O prompt foi enviado junto com o zip do repositório.
+
+- **Resposta recebida** — `compose.yaml` com healthchecks, volumes e variáveis de conexão da API ao PostgreSQL e do Jenkins ao MailHog, além de instruções de teste.
+- **Aceito, ajustado ou descartado** — Ajustado a pedido do integrante: valores padrão dentro do `compose.yaml`, para o ambiente subir sem `.env`; imagem da API trocada pela tag publicada pelo Otavio.
+- **Validação** — Feita pelo integrante: subida dos 4 containers, chamado criado pela API e mantido após `docker compose down` e `up`, e execução do pipeline no Jenkins do Compose, a partir de um repositório de teste, com o e-mail recebido no MailHog.
