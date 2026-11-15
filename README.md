@@ -53,6 +53,32 @@ Quando o terminal mostrar `Started ChamadosApplication`, abra [Chamados do labor
 
 Execute `mvn test`. Os testes de integração usam JUnit, MockMvc e H2 em memória e podem rodar sem o PostgreSQL ativo. Os relatórios do Maven Surefire ficam em `target/surefire-reports/`.
 
+## Imagem Docker (Docker Hub)
+
+Imagem da API: https://hub.docker.com/r/otaviosilva389/chamados-api
+
+```bash
+# Gerar a imagem localmente
+docker build -t otaviosilva389/chamados-api:0.1.0 -t otaviosilva389/chamados-api:latest .
+
+# Publicar no Docker Hub
+docker login
+docker push otaviosilva389/chamados-api:0.1.0
+docker push otaviosilva389/chamados-api:latest
+```
+
+A imagem usa build em dois estágios (Maven + JDK para compilar, JRE Alpine para executar) e roda com usuário não-root.
+A conexão com o banco é configurada pelas variáveis `DB_URL`, `DB_USER` e `DB_PASSWORD`.
+
+Exemplo de execução (precisa de um PostgreSQL acessível):
+
+```bash
+docker run -p 8080:8080 \
+  -e DB_URL=jdbc:postgresql://host:5432/chamados \
+  -e DB_USER=chamados -e DB_PASSWORD=sua_senha \
+  otaviosilva389/chamados-api:0.1.0
+```
+
 ## Notificação do pipeline por e-mail/SMTP
 
 O Jenkins chama `scripts/notify_email.py` no bloco `post/always` global do `Jenkinsfile`, inclusive quando os testes ou o build falham. A mensagem informa resultado, job, número da build, branch, commit e links da execução e do console. O script usa somente a biblioteca padrão do Python 3.10 ou superior; Python e a ferramenta de cobertura são instalados pelo `jenkins/Dockerfile`.
@@ -198,3 +224,25 @@ As falhas foram provocadas em cópias temporárias para validar o tratamento de 
 - **Ajustes durante a validação** — Tratamento dos erros de formato de endereço, proteção contra injeção de cabeçalhos, uso do domínio do remetente no Message-ID para aceitar máquinas com hostname acentuado e captura explícita da branch e do commit retornados pelo checkout do Jenkins. O arquivo Compose foi mantido específico para a frente de SMTP para permitir integração com o trabalho dos demais membros.
 - **Dinâmica de uso** — Assistência nesta conversa para analisar o repositório, gerar código, revisar configurações, executar testes e documentar a contribuição. Não foi registrado pair programming entre integrantes nessa etapa.
 - **Autoria e entendimento** — O escopo e a divisão de responsabilidades foram fornecidos pelo integrante. O código desta contribuição foi produzido com assistência de IA; não há registro de trechos escritos manualmente pelo integrante nesta etapa. Cada integrante deve revisar e compreender os arquivos antes da defesa. A aplicação base e a contribuição inicial de Jenkins mantêm suas autorias registradas no histórico do Git.
+
+### 3º Uso — Dockerfile da API e publicação no Docker Hub
+
+#### Prompt 4
+
+- **Modelo** — Claude (Anthropic), pelo claude.ai.
+- **Objetivo** — Criar o Dockerfile da API, gerar a imagem, publicar no Docker Hub e documentar o link no README.
+- **Prompt utilizado**
+
+  > Criar o Dockerfile da API, gerar a imagem a partir dele, publicar uma versão identificada por tag no Docker Hub e registrar o link no README.
+
+  O prompt foi enviado junto com o PDF do projeto e o zip do repositório.
+
+- **Resposta recebida** — Dockerfile multi-stage (Maven + JDK 17 para compilar, JRE 17 Alpine para executar, usuário não-root), `.dockerignore` e um rascunho da seção do README.
+- **Aceito, ajustado ou descartado** — O Dockerfile e o `.dockerignore` foram aceitos como gerados. O rascunho do README foi ajustado com o usuário real do Docker Hub (`otaviosilva389`) e a tag publicada.
+- **Validação** — Build local da imagem, push das tags `0.1.0` e `latest` e teste manual com um container PostgreSQL na mesma rede Docker. A API subiu, conectou ao banco e a interface funcionou.
+
+#### Dinâmica de uso e autoria
+
+- A IA foi usada individualmente, em conversa passo a passo, também para orientar o fluxo de Git (branch, commits e PR).
+- Feito pelo integrante, sem IA: criar a conta e o repositório no Docker Hub, executar o build, o login e o push, e testar a imagem com PostgreSQL.
+- Gerado pela IA: o conteúdo do Dockerfile, do `.dockerignore` e o texto-base da seção do README.
