@@ -49,10 +49,15 @@ Quando o terminal mostrar `Started ChamadosApplication`, abra [Chamados do labor
 2. Use o filtro para ver todos os chamados, apenas os abertos ou apenas os resolvidos.
 3. Clique em **Resolver** em um chamado aberto. Ele aparecerá na lista de resolvidos.
 
-## Testes
-
-Execute `mvn test`. Os testes de integração usam JUnit, MockMvc e H2 em memória e podem rodar sem o PostgreSQL ativo. Os relatórios do Maven Surefire ficam em `target/surefire-reports/`.
-
+## Testes e cobertura (JaCoCo)
+Execute `mvn test` para rodar os testes de integração ou `mvn verify` para rodar os testes e validar a meta mínima de cobertura. Os testes usam JUnit 5, MockMvc e H2 em memória e podem rodar sem o PostgreSQL ativo.
+- **Relatórios de execução (Surefire):** `target/surefire-reports/`
+- **Relatórios de cobertura (JaCoCo):** `target/site/jacoco/index.html` (HTML), `target/site/jacoco/jacoco.xml` (XML) e `target/site/jacoco/jacoco.csv` (CSV).
+### Métrica de cobertura definida
+A verificação de cobertura foi configurada no `pom.xml` com o `jacoco-maven-plugin` (`0.8.12`), avaliando o pacote completo da aplicação (`element = BUNDLE`) com duas métricas (`value = COVEREDRATIO`):
+1. **Cobertura de Linhas (`counter = LINE`) — mínimo de 90% (`0.90`):** proporção de linhas executáveis do código-fonte percorridas pelos testes.
+2. **Cobertura de Ramificações (`counter = BRANCH`) — mínimo de 90% (`0.90`):** proporção de desvios condicionais (`if`/`else` e expressões booleanas) avaliados tanto no caminho verdadeiro quanto no falso.
+Na fase `verify` (`mvn verify`), o goal `jacoco:check` valida essas métricas e faz o build falhar (`BUILD FAILURE`) caso qualquer uma fique abaixo de **90%**. Com os 8 testes de `ChamadoApiTest`, a aplicação atinge **93,9% de cobertura de linhas** (100% em `Chamado`, `ChamadoController` e `ChamadoRepository`) e **100% de cobertura de ramificações (`BRANCH`)**.
 ## Imagem Docker (Docker Hub)
 
 Imagem da API: https://hub.docker.com/r/otaviosilva389/chamados-api
@@ -280,3 +285,13 @@ Os dados ficam nos volumes `postgres_data` e `jenkins_home`. Para encerrar sem a
 - **Resposta recebida** — `compose.yaml` com healthchecks, volumes e variáveis de conexão da API ao PostgreSQL e do Jenkins ao MailHog, além de instruções de teste.
 - **Aceito, ajustado ou descartado** — Ajustado a pedido do integrante: valores padrão dentro do `compose.yaml`, para o ambiente subir sem `.env`; imagem da API trocada pela tag publicada pelo Otavio.
 - **Validação** — Feita pelo integrante: subida dos 4 containers, chamado criado pela API e mantido após `docker compose down` e `up`, e execução do pipeline no Jenkins do Compose, a partir de um repositório de teste, com o e-mail recebido no MailHog.
+
+### 5º Uso — Testes e cobertura com JaCoCo
+#### Prompt 6
+- **Modelo** — Gemini (Google).
+- **Objetivo** — Revisar a configuração das execuções do plugin `jacoco-maven-plugin` no `pom.xml` para falhar abaixo de 90% no `mvn verify` e verificar cenários de borda nos testes de integração da API.
+- **Prompt utilizado**
+  > Analise a classe `ChamadoController` e o `ChamadoApiTest` atual. Quais cenários de validação das anotações `@NotBlank` e `@Size` ainda não estão cobertos pelos quatro testes existentes e como configurar os goals `prepare-agent`, `report` e `check` do JaCoCo no `pom.xml` para exigir mínimo de 90% no `mvn verify`?
+- **Resposta recebida** — Sugestão de casos de teste para as validações de `equipamento` e limites de tamanho (`@Size`), além da estrutura XML das execuções do `jacoco-maven-plugin` com `element = BUNDLE`.
+- **Aceito, ajustado ou descartado** — A configuração base do plugin JaCoCo foi aceita e ajustada para validar simultaneamente as métricas `LINE` e `BRANCH` com mínimo de `0.90`, garantindo a geração do relatório tanto em `mvn test` quanto em `mvn verify`. Os testes foram implementados mantendo os quatro testes originais do repositório e adicionando os casos de rejeição para `equipamento` em branco, limites de 120 e 1000 caracteres e payload vazio.
+- **Validação** — Feita pelo integrante: execução de `mvn clean verify` confirmando a aprovação dos 8 testes de integração com H2 em memória, inspeção do relatório em `target/site/jacoco/index.html` (93,9% de linhas e 100% de branches) e simulação de cobertura insuficiente para confirmar o `BUILD FAILURE` no `verify`.
