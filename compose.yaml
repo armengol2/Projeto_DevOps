@@ -1,0 +1,77 @@
+name: chamados
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chamados}
+      POSTGRES_USER: ${POSTGRES_USER:-chamados}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chamados}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  api:
+    # Imagem publicada no Docker Hub pelo integrante 2.
+    image: "${API_IMAGE:-otaviosilva389/chamados-api:0.1.0}"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-chamados}
+      DB_USER: ${POSTGRES_USER:-chamados}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-chamados}
+      # Fixa a porta interna, independente do que o Dockerfile da API definir.
+      SERVER_PORT: "8080"
+    ports:
+      - "18081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # interface web e API
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8025/api/v2/messages"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  jenkins:
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      NOTIFY_EMAIL: ${NOTIFY_EMAIL:-destinatario@example.test}
+      SMTP_FROM: ${SMTP_FROM:-jenkins@example.test}
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10}
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      RUN_MAILHOG_TESTS: "1"
+      MAILHOG_SMTP_HOST: mailhog
+      MAILHOG_SMTP_PORT: "1025"
+      MAILHOG_API_URL: http://mailhog:8025
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    depends_on:
+      mailhog:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  jenkins_home:
