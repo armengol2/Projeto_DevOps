@@ -91,4 +91,52 @@ class ChamadoApiTest {
         api.perform(patch("/chamados/{id}/resolver", 999))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void rejeitaChamadoComEquipamentoEmBranco() throws Exception {
+        api.perform(post("/chamados")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"equipamento":" ","descricao":"Tela apagada"}
+                                """))
+                .andExpect(status().isBadRequest());
+        api.perform(get("/chamados"))
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void rejeitaChamadoComEquipamentoAcimaDoLimite() throws Exception {
+        String equipamentoAcimaDoLimite = "E".repeat(121);
+        api.perform(post("/chamados")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"equipamento":"%s","descricao":"Tela apagada"}
+                                """.formatted(equipamentoAcimaDoLimite)))
+                .andExpect(status().isBadRequest());
+        api.perform(get("/chamados"))
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void rejeitaChamadoComDescricaoAcimaDoLimite() throws Exception {
+        String descricaoAcimaDoLimite = "D".repeat(1001);
+        api.perform(post("/chamados")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"equipamento":"Osciloscopio","descricao":"%s"}
+                                """.formatted(descricaoAcimaDoLimite)))
+                .andExpect(status().isBadRequest());
+        api.perform(get("/chamados"))
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void rejeitaChamadoComCamposNulos() throws Exception {
+        api.perform(post("/chamados")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+        api.perform(get("/chamados"))
+                .andExpect(content().json("[]"));
+    }
 }
