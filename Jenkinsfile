@@ -54,7 +54,7 @@ exit "$test_status"
         stage('Build e verificação') {
             steps {
                 sh 'mvn -B -ntp -DskipTests verify'
-                archiveArtifacts artifacts: 'target/chamados-laboratorio-*.jar',
+                archiveArtifacts artifacts: 'target/chamados-laboratorio-*.jar,target/site/jacoco/**',
                                  fingerprint: true
             }
         }
