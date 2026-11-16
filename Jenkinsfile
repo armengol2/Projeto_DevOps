@@ -28,7 +28,6 @@ exit "$test_status"
             }
             post {
                 always {
-                    // Grave os relatorios mesmo quando os testes ou a cobertura falham.
                     sh script: 'mkdir -p reports && python3 -m coverage xml --fail-under=0',
                        returnStatus: true
                     archiveArtifacts artifacts: 'reports/smtp-coverage.xml,reports/smtp-tests.log',
@@ -64,7 +63,6 @@ exit "$test_status"
     post {
         always {
             script {
-                // Capture o resultado antes de tratar uma eventual falha do SMTP.
                 def pipelineResult = currentBuild.currentResult
                 catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', catchInterruptions: false) {
                     withEnv(["BUILD_STATUS=${pipelineResult}"]) {

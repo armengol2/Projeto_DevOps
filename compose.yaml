@@ -18,13 +18,11 @@ services:
     restart: unless-stopped
 
   api:
-    # Imagem publicada no Docker Hub pelo integrante 2.
     image: "${API_IMAGE:-otaviosilva389/chamados-api:0.1.0}"
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-chamados}
       DB_USER: ${POSTGRES_USER:-chamados}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-chamados}
-      # Fixa a porta interna, independente do que o Dockerfile da API definir.
       SERVER_PORT: "8080"
     ports:
       - "18081:8080"
@@ -36,8 +34,8 @@ services:
   mailhog:
     image: mailhog/mailhog:v1.0.1
     ports:
-      - "127.0.0.1:1025:1025"   # SMTP
-      - "127.0.0.1:8025:8025"   # interface web e API
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8025/api/v2/messages"]
       interval: 2s
