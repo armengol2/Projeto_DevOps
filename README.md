@@ -295,3 +295,15 @@ Os dados ficam nos volumes `postgres_data` e `jenkins_home`. Para encerrar sem a
 - **Resposta recebida** — Sugestão de casos de teste para as validações de `equipamento` e limites de tamanho (`@Size`), além da estrutura XML das execuções do `jacoco-maven-plugin` com `element = BUNDLE`.
 - **Aceito, ajustado ou descartado** — A configuração base do plugin JaCoCo foi aceita e ajustada para validar simultaneamente as métricas `LINE` e `BRANCH` com mínimo de `0.90`, garantindo a geração do relatório tanto em `mvn test` quanto em `mvn verify`. Os testes foram implementados mantendo os quatro testes originais do repositório e adicionando os casos de rejeição para `equipamento` em branco, limites de 120 e 1000 caracteres e payload vazio.
 - **Validação** — Feita pelo integrante: execução de `mvn clean verify` confirmando a aprovação dos 8 testes de integração com H2 em memória, inspeção do relatório em `target/site/jacoco/index.html` (93,9% de linhas e 100% de branches) e simulação de cobertura insuficiente para confirmar o `BUILD FAILURE` no `verify`.
+
+### 6º Uso — Jenkinsfile inicial
+
+#### Prompt 7
+
+- **Modelo** — ChatGPT (Codex).
+- **Objetivo** — Depois de validar o checkout e os testes no Jenkins, completar o pipeline com o empacotamento da aplicação e o arquivamento do JAR e do relatório XML de testes.
+- **Prompt utilizado (paráfrase)**
+
+  > Ok, agora que temos toda a aplicação funcionando como deveria, vamos começar com o Jenkinsfile.
+
+- **Conclusão** — Após o primeiro build bem-sucedido, o Codex orientou como usar o Maven para gerar o JAR e como publicar os resultados e arquivar o XML no Jenkins. Apliquei as etapas ao Jenkinsfile e rodei o build #2 no Jenkins. Conferi que os quatro testes da suíte inicial passaram e que o JAR e o XML estavam disponíveis para download. O empacotamento e o arquivamento foram registrados no commit 0754151.
