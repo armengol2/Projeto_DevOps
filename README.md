@@ -57,8 +57,7 @@ Execute `mvn test` para rodar os testes de integração ou `mvn verify` para rod
 A verificação de cobertura foi configurada no `pom.xml` com o `jacoco-maven-plugin` (`0.8.12`), avaliando o pacote completo da aplicação (`element = BUNDLE`) com duas métricas (`value = COVEREDRATIO`):
 1. **Cobertura de Linhas (`counter = LINE`) — mínimo de 90% (`0.90`):** proporção de linhas executáveis do código-fonte percorridas pelos testes.
 2. **Cobertura de Ramificações (`counter = BRANCH`) — mínimo de 90% (`0.90`):** proporção de desvios condicionais (`if`/`else` e expressões booleanas) avaliados tanto no caminho verdadeiro quanto no falso.
-Na fase `verify` (`mvn verify`), o goal `jacoco:check` valida essas métricas e faz o build falhar (`BUILD FAILURE`) caso qualquer uma fique abaixo de **90%**. Com os 8 testes de `ChamadoApiTest`, a aplicação atinge **93,9% de cobertura de linhas** (100% em `Chamado`, `ChamadoController` e `ChamadoRepository`) e **100% de cobertura de ramificações (`BRANCH`)**.
-## Imagem Docker (Docker Hub)
+Na fase `verify` (`mvn verify`), executada diretamente no estágio `Build e verificação` do `Jenkinsfile`, o goal `jacoco:check` valida essas métricas e interrompe a pipeline (`BUILD FAILURE`) caso qualquer uma fique abaixo de **90%**, arquivando os relatórios de cobertura em `target/site/jacoco/**`. Com os 8 testes de `ChamadoApiTest`, a aplicação atinge **93,9% de cobertura de linhas** (100% em `Chamado`, `ChamadoController` e `ChamadoRepository`) e **100% de cobertura de ramificações (`BRANCH`)**.
 
 Imagem da API: https://hub.docker.com/r/otaviosilva389/chamados-api
 
@@ -113,7 +112,7 @@ docker compose --env-file .env.smtp -f compose.smtp.yml exec jenkins cat /var/je
 
 Crie um job **Pipeline from SCM**, aponte para este repositório e para a branch que contém esta implementação e use `Jenkinsfile` como script. As etapas são todas versionadas no arquivo. Esta contribuição parte da branch `feature/jenkins-pipeline`; enquanto estiver apenas local, o checkout remoto ainda não consegue lê-la. Após a integração na `main`, use a `main` no job.
 
-O estágio `Testes SMTP` executa os testes Python e exige cobertura de pelo menos 90%, incluindo ramificações, para o código em `scripts/`. No Compose de SMTP, o estágio também executa os testes reais contra o MailHog e confere as mensagens recebidas via API. Os relatórios `reports/smtp-tests.log` e `reports/smtp-coverage.xml` são arquivados no Jenkins mesmo quando os testes falham, junto aos relatórios Java e ao JAR das etapas seguintes quando disponíveis. Essa medição cobre o script SMTP; a cobertura da aplicação Java deve ser tratada pela frente de testes do grupo.
+O estágio `Testes SMTP` executa os testes Python e exige cobertura de pelo menos 90%, incluindo ramificações, para o código em `scripts/`. No Compose de SMTP, o estágio também executa os testes reais contra o MailHog e confere as mensagens recebidas via API. Os relatórios `reports/smtp-tests.log` e `reports/smtp-coverage.xml` são arquivados no Jenkins mesmo quando os testes falham, junto aos relatórios Java e ao JAR das etapas seguintes quando disponíveis. Essa medição cobre o script SMTP; já a cobertura da aplicação Java (mínimo de 90% de linhas e branches via JaCoCo) é validada automaticamente pelo comando mvn -B -ntp verify na pipeline e seus relatórios em target/site/jacoco/ são arquivados pelo Jenkins.
 
 Dentro da rede Docker, o Jenkins usa `mailhog:1025`. Para um script executado diretamente no Windows, use `127.0.0.1:1025`. O MailHog captura as mensagens localmente: ver uma mensagem nele comprova o envio SMTP para o servidor de teste, e não a entrega à caixa de entrada de um provedor externo.
 
@@ -178,7 +177,7 @@ python scripts/notify_email.py
 
 - 27 testes SMTP aprovados, incluindo o envio e a leitura de mensagens reais no MailHog.
 - Cobertura do script: 98,2% das linhas e 94,6% das ramificações (97% no relatório combinado).
-- 4 testes Java aprovados e JAR gerado na execução bem-sucedida do Jenkins.
+- 8 testes Java aprovados, cobertura mínima de 90% validada pelo JaCoCo (93,9% de linhas e 100% de branches) no mvn verify da pipeline e relatórios do JaCoCo + JAR arquivados no Jenkins.
 - Execução real com Jenkins 2.580.2, Java 21, Python 3.13 e MailHog 1.0.1 em containers; testes também executados com Python 3.12 no Windows.
 
 | Cenário no Jenkins | Resultado verificado |

@@ -45,7 +45,7 @@ exit "$test_status"
                 always {
                     junit testResults: 'target/surefire-reports/TEST-*.xml',
                           allowEmptyResults: true
-                    archiveArtifacts artifacts: 'target/surefire-reports/TEST-*.xml',
+                    archiveArtifacts artifacts: 'target/surefire-reports/TEST-*.xml,target/site/jacoco/**',
                                      allowEmptyArchive: true
                 }
             }
@@ -53,9 +53,15 @@ exit "$test_status"
 
         stage('Build e verificação') {
             steps {
-                sh 'mvn -B -ntp -DskipTests verify'
-                archiveArtifacts artifacts: 'target/chamados-laboratorio-*.jar,target/site/jacoco/**',
+                sh 'mvn -B -ntp verify'
+                archiveArtifacts artifacts: 'target/chamados-laboratorio-*.jar',
                                  fingerprint: true
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'target/site/jacoco/**',
+                                     allowEmptyArchive: true
+                }
             }
         }
     }
